@@ -58,6 +58,9 @@ async function createOrGetCertKey() {
   }
 
   const certKey = await createCertificate({commonName: 'localhost'});
+  if (!fs.existsSync(certs)) {
+    fs.mkdirSync(certs);
+  }
   fs.writeFileSync(certPath, certKey.certificate);
   fs.writeFileSync(keyPath, certKey.serviceKey);
 
