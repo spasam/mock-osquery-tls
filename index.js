@@ -17,14 +17,12 @@ const createCertificate = util.promisify(pem.createCertificate);
 
 if (args.help) {
   console.info('\nUsage:');
-  console.info(
-    '\n\tnode',
-    process.argv[1],
-    ' [--help] [--node_key <key>] [--port <port>] [--conf <config-file>] [--dr <distributed-read-query>] [--skip <count>] [--mongo <url>]'
-  );
+  console.info('\n\tnode', process.argv[1], ' [args...]');
   console.info('\n\t--port <port>    - Port to listen on. Default: 8443');
   console.info('\t--node_key <key> - Shared secret node key. Default: mock-node-key');
   console.info('\t--conf <file>    - Configuration to send to Osquery, basequery, etc. Default: sample.conf');
+  console.info('\t--host <name>    - Hostname to use in common name of certificate. Default: localhost');
+  console.info('\t--gen_exit       - Generate certificate/private key if necessary and exit');
   console.info('\t--dr <query>     - Distributed read query to send. Can be repeated for multiple queries. Default: none');
   console.info('\t--delay <ms>     - Delay in milli-seconds between distributed read queries. Default: 12000 ms');
   console.info('\t--skip <count>   - Number of distributed read requests to skip before sending configured queries. Default: 5');
@@ -85,16 +83,22 @@ async function createOrGetCertKey() {
   const certPath = path.join(certs, 'cert.pem');
   const keyPath = path.join(certs, 'key.pem');
   if (fs.existsSync(certPath) && fs.existsSync(keyPath)) {
+    if (args.gen_exit) {
+      process.exit(0);
+    }
     return { serviceKey: fs.readFileSync(keyPath), certificate: fs.readFileSync(certPath) };
   }
 
-  const certKey = await createCertificate({ commonName: 'localhost' });
+  const certKey = await createCertificate({ commonName: args.host || 'localhost' });
   if (!fs.existsSync(certs)) {
     fs.mkdirSync(certs);
   }
   fs.writeFileSync(certPath, certKey.certificate);
   fs.writeFileSync(keyPath, certKey.serviceKey);
 
+  if (args.gen_exit) {
+    process.exit(0);
+  }
   return certKey;
 }
 
