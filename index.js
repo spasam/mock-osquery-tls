@@ -22,6 +22,7 @@ if (args.help) {
   console.info('\t--node_key <key> - Shared secret node key. Default: mock-node-key');
   console.info('\t--conf <file>    - Configuration to send to Osquery, basequery, etc. Default: sample.conf');
   console.info('\t--host <name>    - Hostname to use in common name of certificate. Default: localhost');
+  console.info('\t--status         - Log status messages to console. Default: false');
   console.info('\t--gen_exit       - Generate certificate/private key if necessary and exit');
   console.info('\t--dr <query>     - Distributed read query to send. Can be repeated for multiple queries. Default: none');
   console.info('\t--delay <ms>     - Delay in milli-seconds between distributed read queries. Default: 12000 ms');
@@ -110,7 +111,17 @@ async function writeResults(json) {
 
   const results = {};
   json.data.forEach(i => {
-    const entry = Object.assign(i, i.columns);
+    let entry;
+    if (i.hasOwnProperty('snapshot')) {
+      i.snapshot.forEach(j => (entry = Object.assign(i, j)));
+    } else if (i.hasOwnProperty('columns')) {
+      entry = Object.assign(i, i.columns);
+    } else {
+      console.error('Unknown log entry: ' + JSON.stringify(i, 0, 2));
+      return;
+    }
+
+    delete entry.snapshot;
     delete entry.columns;
 
     const table = entry.name;
@@ -160,7 +171,9 @@ async function config(req, res) {
 
 async function log(req, res) {
   if (req.body.log_type === 'status') {
-    console.info(new Date(), 'Status:', JSON.stringify(req.body, 0, 2));
+    if (args.status) {
+      console.info(new Date(), 'Status:', JSON.stringify(req.body, 0, 2));
+    }
   } else {
     await writeResults(req.body);
   }
