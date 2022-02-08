@@ -103,39 +103,101 @@ async function createOrGetCertKey() {
   return certKey;
 }
 
+function getDefaultFormatEntries(json) {
+  const results = {};
+  if (!json.hasOwnProperty('data') || !Array.isArray(json.data)) {
+    console.error(new Date(), 'Unknown log entry: ' + JSON.stringify(json, 0, 2));
+    return results;
+  }
+
+  json.data.forEach(i => {
+    let entry;
+    if (i.hasOwnProperty('snapshot')) {
+      i.snapshot.forEach(j => {
+        entry = Object.assign(i, j);
+        entry._id = new ObjectId();
+        const table = entry.name;
+        delete entry.snapshot;
+        delete entry.name;
+
+        if (!results[table]) {
+          results[table] = [];
+        }
+        results[table].push(entry);
+      });
+    } else if (i.hasOwnProperty('columns')) {
+      entry = Object.assign(i, i.columns);
+      const table = entry.name;
+      entry._id = new ObjectId();
+      delete entry.columns;
+      delete entry.name;
+
+      if (!results[table]) {
+        results[table] = [];
+      }
+      results[table].push(entry);
+    } else {
+      console.error(new Date(), 'Unknown log entry: ' + JSON.stringify(i, 0, 2));
+    }
+  });
+
+  return results;
+}
+
+function getV3FormatEntries(json) {
+  const results = {};
+  if (!json.hasOwnProperty('tables')) {
+    console.error(new Date(), 'Unknown log entry: ' + JSON.stringify(json, 0, 2));
+    return results;
+  }
+
+  for (const table of Object.keys(json.tables)) {
+    json.tables[table].forEach(i => {
+      let entry;
+      if (i.hasOwnProperty('snapshot')) {
+        i.snapshot.forEach(j => {
+          entry = Object.assign(i, j);
+          delete entry.snapshot;
+          entry._id = new ObjectId();
+
+          if (!results[table]) {
+            results[table] = [];
+          }
+          results[table].push(entry);
+        });
+      } else if (i.hasOwnProperty('columns')) {
+        entry = Object.assign(i, i.columns);
+        delete entry.columns;
+        entry._id = new ObjectId();
+
+        if (!results[table]) {
+          results[table] = [];
+        }
+        results[table].push(entry);
+      } else {
+        console.error(new Date(), 'Unknown log entry: ' + JSON.stringify(i, 0, 2));
+      }
+    });
+  }
+
+  return results;
+}
+
 async function writeResults(json) {
   if (!mongoDb) {
     console.info(new Date(), 'Log:', JSON.stringify(json, 0, 2));
     return;
   }
 
-  const results = {};
-  json.data.forEach(i => {
-    let entry;
-    if (i.hasOwnProperty('snapshot')) {
-      i.snapshot.forEach(j => (entry = Object.assign(i, j)));
-    } else if (i.hasOwnProperty('columns')) {
-      entry = Object.assign(i, i.columns);
-    } else {
-      console.error('Unknown log entry: ' + JSON.stringify(i, 0, 2));
-      return;
-    }
-
-    delete entry.snapshot;
-    delete entry.columns;
-
-    const table = entry.name;
-    delete entry.name;
-
-    if (!results[table]) {
-      results[table] = [];
-    }
-
-    entry._id = new ObjectId();
-    results[table].push(entry);
-  });
+  let results;
+  if (json.logger_tls_format === 3) {
+    results = getV3FormatEntries(json);
+  } else {
+    results = getDefaultFormatEntries(json);
+  }
 
   for (const table of Object.keys(results)) {
+    console.info(new Date(), `Log: Inserting ${results[table].length} entries into ${table}`);
     const collection = await mongoDb.collection(table);
     await collection.insertMany(results[table]);
   }
@@ -182,7 +244,7 @@ async function log(req, res) {
 }
 
 async function dr(req, res) {
-  console.info(new Date(), 'Read:', JSON.stringify(req.body, 0, 2));
+  console.info(new Date(), 'Read:', req.body);
   assert.strictEqual(req.body.node_key, node_key, 'Invalid node key: ' + req.body.node_key);
 
   if (skip === drCount) {
